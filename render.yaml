@@ -4,6 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm install && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -50,18 +51,6 @@ services:
         value: "16"
       - key: DEFAULT_TIMEZONE
         value: Africa/Nairobi
-
-  - type: web
-    name: swiftpos-frontend
-    runtime: static
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    pullRequestPreviewsEnabled: true
-    envVars:
-      - key: VITE_API_URL
-        sync: false
-      - key: NODE_VERSION
-        value: "18"
 
 redis:
   - name: swiftpos-redis
