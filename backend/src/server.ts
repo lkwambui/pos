@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import bcrypt from 'bcryptjs';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -13,6 +14,55 @@ import { logger } from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import routes from './routes';
 import { setupSwagger } from './utils/swagger';
+
+const RESOURCES = [
+  'auth', 'users', 'roles', 'categories', 'brands', 'products',
+  'customers', 'suppliers', 'branches', 'registers', 'sales',
+  'payments', 'invoices', 'purchases', 'quotations', 'returns',
+  'expenses', 'inventory', 'discounts', 'tax-rates', 'notifications',
+  'settings', 'dashboard', 'reports', 'etims',
+];
+
+const ACTIONS = ['create', 'read', 'update', 'delete'];
+
+async function seedDatabase() {
+  const existingRoles = await prisma.role.findMany();
+  if (existingRoles.length > 0) return;
+
+  logger.info('Seeding database...');
+
+  const adminRole = await prisma.role.create({
+    data: { name: 'Admin', description: 'Full system access' },
+  });
+
+  await prisma.role.create({ data: { name: 'Manager', description: 'Branch management access' } });
+  await prisma.role.create({ data: { name: 'Cashier', description: 'Point of sale operations' } });
+  await prisma.role.create({ data: { name: 'Accountant', description: 'Financial management' } });
+  await prisma.role.create({ data: { name: 'InventoryManager', description: 'Stock management' } });
+
+  const adminPermissions = RESOURCES.flatMap(resource =>
+    ACTIONS.map(action => ({
+      roleId: adminRole.id,
+      action,
+      resource,
+    }))
+  );
+
+  await prisma.permission.createMany({ data: adminPermissions });
+
+  const hashedPassword = await bcrypt.hash('Admin123!', config.bcrypt.saltRounds);
+  await prisma.user.create({
+    data: {
+      email: 'admin@swiftpos.com',
+      password: hashedPassword,
+      firstName: 'Admin',
+      lastName: 'User',
+      roleId: adminRole.id,
+    },
+  });
+
+  logger.info('Database seeded successfully');
+}
 
 const app = express();
 
@@ -45,6 +95,8 @@ const start = async () => {
   try {
     await prisma.$connect();
     logger.info('Database connected');
+
+    await seedDatabase();
 
     app.listen(config.app.port, () => {
       logger.info({ port: config.app.port, env: config.app.env }, `${config.app.name} server started`);
