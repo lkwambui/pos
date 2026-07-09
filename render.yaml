@@ -16,9 +16,7 @@ services:
       - key: APP_NAME
         value: SwiftPOS
       - key: DATABASE_URL
-        fromDatabase:
-          name: swiftpos-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           name: swiftpos-redis
@@ -64,12 +62,6 @@ services:
         sync: false
       - key: NODE_VERSION
         value: "18"
-
-databases:
-  - name: swiftpos-db
-    databaseName: swiftpos
-    plan: free
-    ipAllowList: []
 
 redis:
   - name: swiftpos-redis
