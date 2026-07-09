@@ -10,10 +10,10 @@ import type { JwtPayload } from '../../middleware/auth';
 
 const generateTokens = (payload: JwtPayload) => {
   const accessToken = jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+    expiresIn: config.jwt.expiresIn as string & jwt.SignOptions['expiresIn'],
   });
   const refreshToken = jwt.sign(payload, config.jwt.refreshSecret, {
-    expiresIn: config.jwt.refreshExpiresIn,
+    expiresIn: config.jwt.refreshExpiresIn as string & jwt.SignOptions['expiresIn'],
   });
   return { accessToken, refreshToken };
 };
