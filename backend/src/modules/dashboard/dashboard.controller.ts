@@ -29,7 +29,7 @@ export const getSummary = async (req: Request, res: Response, next: NextFunction
           where: { product: { ...branchFilter, isActive: true, trackStock: true } },
           select: { quantity: true, minStock: true },
         });
-        return stocks.filter(s => s.quantity > 0 && s.quantity <= s.minStock).length;
+        return stocks.filter(s => s.quantity <= s.minStock).length;
       })(),
     ]);
 
