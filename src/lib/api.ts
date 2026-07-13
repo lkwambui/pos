@@ -1,112 +1,80 @@
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-interface ApiResponse<T> {
-  success: boolean;
-  message: string;
-  data: T;
-  pagination?: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasMore: boolean;
-  };
+function getToken() { return localStorage.getItem('auth_token'); }
+function setToken(t: string | null) {
+  if (t) localStorage.setItem('auth_token', t);
+  else localStorage.removeItem('auth_token');
+}
+function getRefreshToken() { return localStorage.getItem('refresh_token'); }
+function setRefreshToken(t: string | null) {
+  if (t) localStorage.setItem('refresh_token', t);
+  else localStorage.removeItem('refresh_token');
 }
 
-class ApiClient {
-  private token: string | null = null;
-  private refreshTok: string | null = null;
-  private refreshing = false;
-  private refreshPromise: Promise<boolean> | null = null;
+let refreshing = false;
+let refreshProm: Promise<boolean> | null = null;
 
-  constructor() {
-    this.token = localStorage.getItem('auth_token');
-    this.refreshTok = localStorage.getItem('refresh_token');
-  }
-
-  setToken(token: string | null) {
-    this.token = token;
-    if (token) localStorage.setItem('auth_token', token);
-    else localStorage.removeItem('auth_token');
-  }
-
-  setRefreshToken(token: string | null) {
-    this.refreshTok = token;
-    if (token) localStorage.setItem('refresh_token', token);
-    else localStorage.removeItem('refresh_token');
-  }
-
-  getToken() { return this.token; }
-
-  setTokens(accessToken: string, refreshToken: string) {
-    this.setToken(accessToken);
-    this.setRefreshToken(refreshToken);
-  }
-
-  clearTokens() {
-    this.setToken(null);
-    this.setRefreshToken(null);
-  }
-
-  private async doRefresh(): Promise<boolean> {
-    if (!this.refreshTok) return false;
-    try {
-      const res = await fetch(`${API_BASE}/auth/refresh-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: this.refreshTok }),
-      });
-      if (!res.ok) { this.clearTokens(); return false; }
-      const json = await res.json();
-      this.setTokens(json.data.accessToken, json.data.refreshToken);
-      return true;
-    } catch {
-      this.clearTokens();
-      return false;
-    }
-  }
-
-  async request<T>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-
-    const res = await fetch(`${API_BASE}${path}`, {
-      method, headers,
-      body: body ? JSON.stringify(body) : undefined,
+async function tryRefresh(): Promise<boolean> {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+  try {
+    const r = await fetch(`${API_BASE}/auth/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
     });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      if (res.status === 401 && this.refreshTok && !path.includes('/auth/refresh-token')) {
-        if (!this.refreshing) {
-          this.refreshing = true;
-          this.refreshPromise = this.doRefresh().finally(() => {
-            this.refreshing = false;
-            this.refreshPromise = null;
-          });
-        }
-
-        const ok = await this.refreshPromise;
-        if (ok) {
-          headers['Authorization'] = `Bearer ${this.token}`;
-          const r2 = await fetch(`${API_BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
-          const j2 = await r2.json();
-          if (!r2.ok) throw new Error(j2.message || 'Request failed');
-          return j2;
-        }
-      }
-      throw new Error(json.message || 'Request failed');
-    }
-
-    return json;
+    if (!r.ok) { setToken(null); setRefreshToken(null); return false; }
+    const j = await r.json();
+    setToken(j.data.accessToken);
+    setRefreshToken(j.data.refreshToken);
+    return true;
+  } catch {
+    setToken(null); setRefreshToken(null);
+    return false;
   }
-
-  get<T>(path: string) { return this.request<T>('GET', path); }
-  post<T>(path: string, body?: unknown) { return this.request<T>('POST', path, body); }
-  put<T>(path: string, body?: unknown) { return this.request<T>('PUT', path, body); }
-  delete<T>(path: string) { return this.request<T>('DELETE', path); }
 }
 
-export const api = new ApiClient();
-export type { ApiResponse };
+async function req<T>(method: string, path: string, body?: unknown): Promise<{ success: boolean; message: string; data: T; pagination?: any }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const tok = getToken();
+  if (tok) headers['Authorization'] = `Bearer ${tok}`;
+
+  const doFetch = () => fetch(`${API_BASE}${path}`, {
+    method, headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let res = await doFetch();
+  let json = await res.json();
+
+  if (!res.ok && res.status === 401 && getRefreshToken() && !path.includes('/auth/refresh-token')) {
+    if (!refreshing) {
+      refreshing = true;
+      refreshProm = tryRefresh().finally(() => { refreshing = false; refreshProm = null; });
+    }
+    const ok = await refreshProm;
+    if (ok) {
+      headers['Authorization'] = `Bearer ${getToken()}`;
+      res = await doFetch();
+      json = await res.json();
+    }
+  }
+
+  if (!res.ok) throw new Error(json.message || 'Request failed');
+  return json;
+}
+
+export const api = {
+  getToken,
+  setToken,
+  setRefreshToken,
+  setTokens: (accessToken: string, refreshToken: string) => {
+    setToken(accessToken);
+    setRefreshToken(refreshToken);
+  },
+  clearTokens: () => { setToken(null); setRefreshToken(null); },
+  get: <T>(path: string) => req<T>('GET', path),
+  post: <T>(path: string, body?: unknown) => req<T>('POST', path, body),
+  put: <T>(path: string, body?: unknown) => req<T>('PUT', path, body),
+  delete: <T>(path: string) => req<T>('DELETE', path),
+};
