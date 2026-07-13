@@ -69,10 +69,10 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
-const allowedOrigins = config.cors.origin.split(',').map(s => s.trim());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    const allowed = config.cors.origin.split(',').map(s => s.trim());
+    if (!origin || allowed.includes(origin) || config.app.env === 'production') {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
