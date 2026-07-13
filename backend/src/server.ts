@@ -75,7 +75,7 @@ app.use(cors({
     if (!origin || allowed.includes(origin) || config.app.env === 'production') {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true);
     }
   },
   credentials: true,
