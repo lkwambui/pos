@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 import {
   ShoppingCart, Package, Search, Scan, Plus, Minus, X,
   User, ChevronDown, CheckCircle2, Banknote, Phone, CreditCard,
   Layers, QrCode, Printer, Mail, MessageSquare, FileDown,
-  Zap, Shield,
+  Zap, Shield, AlertCircle, Loader2,
 } from "lucide-react";
 
 interface Product {
@@ -49,6 +49,12 @@ export function NewSaleView() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [mpesaPhone, setMpesaPhone] = useState("254");
+  const [mpesaStatus, setMpesaStatus] = useState<string | null>(null);
+  const [mpesaError, setMpesaError] = useState<string | null>(null);
+  const [lastPaymentId, setLastPaymentId] = useState<string | null>(null);
+  const [lastCheckoutId, setLastCheckoutId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     api.get<PaginatedResponse<Product>>("/products?limit=100")
@@ -59,6 +65,18 @@ export function NewSaleView() {
         setCategories(cats);
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (paymentMode === "MPESA") {
+      setAmountPaid(total.toFixed(2));
+    }
+  }, [paymentMode, total]);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   const filteredProducts = products.filter(p => {
@@ -101,9 +119,57 @@ export function NewSaleView() {
   const total = subtotal;
   const balance = amountPaid ? parseFloat(amountPaid.replace(/,/g, "")) - total : 0;
 
+  const handlePaymentMode = (mode: string) => {
+    setPaymentMode(mode === paymentMode ? null : mode);
+    setMpesaPhone("254");
+    setMpesaStatus(null);
+    setMpesaError(null);
+  };
+
+  const initiateMpesaStkPush = async (paymentId: string) => {
+    try {
+      const res = await api.post("/mpesa/stk-push", {
+        paymentId,
+        phone: mpesaPhone,
+      });
+      setLastCheckoutId(res.data.checkoutRequestId);
+      setMpesaStatus("processing");
+      return res.data.checkoutRequestId;
+    } catch (err: any) {
+      setMpesaError(err.message || "M-Pesa STK Push failed");
+      setMpesaStatus("failed");
+      setSubmitting(false);
+      return null;
+    }
+  };
+
+  const pollPaymentStatus = (checkoutId: string, paymentId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    return new Promise<void>((resolve) => {
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await api.get(`/mpesa/status/${checkoutId}`);
+          if (res.data.status === "PAID") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setMpesaStatus("paid");
+            resolve();
+          } else if (res.data.status === "REFUNDED") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setMpesaStatus("failed");
+            setMpesaError("Payment was not completed. Please try again.");
+            resolve();
+          }
+        } catch {
+          // continue polling
+        }
+      }, 3000);
+    });
+  };
+
   const completeSale = async () => {
     if (cart.length === 0 || submitting) return;
     setSubmitting(true);
+    setMpesaError(null);
     try {
       const res = await api.post("/sales", {
         items: cart.map(i => ({
@@ -114,8 +180,24 @@ export function NewSaleView() {
           vatRate: i.vatRate,
         })),
         amountPaid: amountPaid ? parseFloat(amountPaid.replace(/,/g, "")) : 0,
+        paymentMethod: paymentMode || undefined,
       });
+
       setLastSale(res.data);
+
+      if (paymentMode === "MPESA") {
+        const payment = res.data.payments?.[0] || res.data.payment;
+        if (payment?.id) {
+          setLastPaymentId(payment.id);
+          const checkoutId = await initiateMpesaStkPush(payment.id);
+          if (checkoutId) {
+            await pollPaymentStatus(checkoutId, payment.id);
+            const updatedSale = await api.get(`/sales/${res.data.id}`);
+            setLastSale(updatedSale.data);
+          }
+        }
+      }
+
       setShowReceipt(true);
     } catch (err: any) {
       alert(err.message || "Failed to complete sale");
@@ -132,12 +214,17 @@ export function NewSaleView() {
         total={total}
         vat={vat}
         paymentMode={paymentMode || "Cash"}
+        mpesaStatus={mpesaStatus}
         onClose={() => {
           setShowReceipt(false);
           setCart([]);
           setAmountPaid("");
           setPaymentMode(null);
           setLastSale(null);
+          setMpesaStatus(null);
+          setMpesaError(null);
+          setLastPaymentId(null);
+          setLastCheckoutId(null);
         }}
       />
     );
@@ -154,7 +241,7 @@ export function NewSaleView() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-muted rounded-lg text-sm placeholder-muted-foreground border-0 outline-none focus:ring-2 focus:ring-primary/20"
-                placeholder="Search product or scan barcode…"
+                placeholder="Search product or scan barcode..."
               />
             </div>
             <button className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center hover:bg-slate-200 transition-colors">
@@ -308,11 +395,12 @@ export function NewSaleView() {
               <input
                 value={amountPaid}
                 onChange={e => setAmountPaid(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 bg-muted rounded-lg text-sm font-semibold placeholder-muted-foreground border-0 outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={paymentMode === "MPESA"}
+                className="w-full pl-10 pr-3 py-2 bg-muted rounded-lg text-sm font-semibold placeholder-muted-foreground border-0 outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
                 placeholder="0.00"
               />
             </div>
-            {balance > 0 && (
+            {paymentMode !== "MPESA" && balance > 0 && (
               <div className="text-right">
                 <div className="text-[10px] text-muted-foreground">Change</div>
                 <div className="text-xs font-bold text-emerald-600">{fmt(balance)}</div>
@@ -331,7 +419,7 @@ export function NewSaleView() {
             ].map(btn => (
               <button
                 key={btn.id}
-                onClick={() => setPaymentMode(btn.id)}
+                onClick={() => handlePaymentMode(btn.id)}
                 className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-semibold transition-all ${btn.color} ${paymentMode === btn.id ? "ring-2 ring-offset-1 ring-current scale-[0.98]" : ""}`}
               >
                 <btn.icon size={13} />
@@ -339,13 +427,48 @@ export function NewSaleView() {
               </button>
             ))}
           </div>
+
+          {paymentMode === "MPESA" && (
+            <div className="space-y-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">+</span>
+                <input
+                  value={mpesaPhone}
+                  onChange={e => setMpesaPhone(e.target.value)}
+                  className="w-full pl-7 pr-3 py-2 bg-muted rounded-lg text-sm font-mono placeholder-muted-foreground border-0 outline-none focus:ring-2 focus:ring-green-500/20"
+                  placeholder="254712345678"
+                />
+              </div>
+              {mpesaError && (
+                <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                  <AlertCircle size={12} />
+                  {mpesaError}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={completeSale}
-            disabled={cart.length === 0 || submitting}
+            disabled={cart.length === 0 || submitting || (paymentMode === "MPESA" && !mpesaPhone)}
             className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <CheckCircle2 size={16} />
-            {submitting ? "Processing…" : `Complete Sale · ${fmt(total)}`}
+            {submitting && mpesaStatus === "processing" ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Waiting for M-Pesa...
+              </>
+            ) : submitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                {paymentMode === "MPESA" ? `Pay with M-Pesa · ${fmt(total)}` : `Complete Sale · ${fmt(total)}`}
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -353,15 +476,28 @@ export function NewSaleView() {
   );
 }
 
-function ReceiptView({ sale, cart, total, vat, paymentMode, onClose }: {
-  sale: any; cart: CartItem[]; total: number; vat: number; paymentMode: string; onClose: () => void;
+function ReceiptView({ sale, cart, total, vat, paymentMode, mpesaStatus, onClose }: {
+  sale: any; cart: CartItem[]; total: number; vat: number; paymentMode: string; mpesaStatus?: string | null; onClose: () => void;
 }) {
   const invoiceNum = sale?.saleNumber || "N/A";
+  const paymentRef = sale?.payments?.[0]?.reference || sale?.payment?.reference || "";
+  const isMpesa = paymentMode === "MPESA";
+  const paymentComplete = !isMpesa || mpesaStatus === "paid";
+
   return (
     <div className="flex h-full items-center justify-center bg-muted p-8">
       <div className="max-w-sm w-full">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold text-foreground">Receipt</h2>
+          <div className="flex items-center gap-2">
+            {paymentComplete ? (
+              <CheckCircle2 size={18} className="text-emerald-600" />
+            ) : (
+              <Loader2 size={18} className="text-amber-500 animate-spin" />
+            )}
+            <h2 className="font-semibold text-foreground">
+              {paymentComplete ? "Receipt" : "Processing Payment"}
+            </h2>
+          </div>
           <div className="flex gap-2">
             {[
               { icon: Printer, label: "Print" },
@@ -434,9 +570,15 @@ function ReceiptView({ sale, cart, total, vat, paymentMode, onClose }: {
               <span>KES {total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-slate-600 text-[11px]">
-              <span>Payment ({paymentMode.toUpperCase()})</span>
-              <span>KES {total.toFixed(2)}</span>
+              <span>Payment</span>
+              <span>{paymentMode.toUpperCase()}{isMpesa && mpesaStatus === "paid" && paymentRef ? ` (${paymentRef})` : ""}</span>
             </div>
+            {isMpesa && !paymentComplete && (
+              <div className="flex items-center gap-1.5 text-amber-600 text-[11px] mt-1">
+                <Loader2 size={11} className="animate-spin" />
+                Awaiting M-Pesa confirmation...
+              </div>
+            )}
           </div>
 
           <div className="border-t border-dashed border-slate-200 my-3" />

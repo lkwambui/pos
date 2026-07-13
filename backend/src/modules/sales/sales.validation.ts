@@ -13,6 +13,7 @@ export const createSaleSchema = z.object({
   branchId: z.string().uuid().optional(),
   items: z.array(saleItemSchema).min(1, 'At least one item is required'),
   amountPaid: z.number().min(0).optional().default(0),
+  paymentMethod: z.enum(['CASH', 'CARD', 'MPESA', 'BANK_TRANSFER', 'SPLIT', 'CREDIT']).optional(),
   notes: z.string().optional(),
 });
 

@@ -25,6 +25,7 @@ import settingsRoutes from '../modules/settings/settings.routes';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes';
 import reportsRoutes from '../modules/reports/reports.routes';
 import etimsRoutes from '../modules/etims/etims.routes';
+import mpesaRoutes from '../modules/mpesa/mpesa.routes';
 
 const router = Router();
 
@@ -57,5 +58,6 @@ router.use('/settings', settingsRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/etims', etimsRoutes);
+router.use('/mpesa', mpesaRoutes);
 
 export default router;

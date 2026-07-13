@@ -454,21 +454,24 @@ model SaleItem {
 // ─── Payments ──────────────────────────────────────
 
 model Payment {
-  id            String        @id @default(uuid())
-  saleId        String?
-  sale          Sale?         @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  invoiceId     String?
-  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
-  purchaseId    String?
-  purchase      Purchase?     @relation(fields: [purchaseId], references: [id])
-  amount        Decimal       @default(0)
-  method        PaymentMethod // CASH, CARD, MPESA, BANK_TRANSFER, SPLIT, CREDIT
-  reference     String?       // Transaction ref, M-Pesa code, cheque no
-  status        PaymentStatus @default(PAID)
-  notes         String?
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  createdAt     DateTime      @default(now())
+  id                      String        @id @default(uuid())
+  saleId                  String?
+  sale                    Sale?         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  invoiceId               String?
+  invoice                 Invoice?      @relation(fields: [invoiceId], references: [id])
+  purchaseId              String?
+  purchase                Purchase?     @relation(fields: [purchaseId], references: [id])
+  amount                  Decimal       @default(0)
+  method                  PaymentMethod // CASH, CARD, MPESA, BANK_TRANSFER, SPLIT, CREDIT
+  reference               String?       // Transaction ref, M-Pesa receipt code, cheque no
+  status                  PaymentStatus @default(PAID)
+  notes                   String?
+  mpesaCheckoutRequestId  String?       // M-Pesa STK Push CheckoutRequestID
+  mpesaMerchantRequestId  String?       // M-Pesa MerchantRequestID
+  mpesaPhone              String?       // Phone number for M-Pesa transaction
+  userId                  String
+  user                    User          @relation(fields: [userId], references: [id])
+  createdAt               DateTime      @default(now())
 
   @@index([saleId])
   @@index([invoiceId])

@@ -9,6 +9,7 @@ export const createSale = async (data: {
   branchId?: string;
   items: { productId: string; quantity: number; unitPrice: number; discount?: number; vatRate?: number }[];
   amountPaid?: number;
+  paymentMethod?: string;
   notes?: string;
 }, userId: string) => {
   const saleNumber = generateSaleNumber();
@@ -60,7 +61,7 @@ export const createSale = async (data: {
           }),
         },
       },
-      include: { items: { include: { product: true } }, customer: true },
+      include: { items: { include: { product: true } }, customer: true, payments: true },
     });
 
     for (const item of data.items) {
@@ -90,12 +91,15 @@ export const createSale = async (data: {
     }
 
     if (data.amountPaid && data.amountPaid > 0) {
+      const method = data.paymentMethod || 'CASH';
+      const status = method === 'MPESA' ? 'PENDING' : 'PAID';
+
       await tx.payment.create({
         data: {
           saleId: sale.id,
           amount: data.amountPaid,
-          method: 'CASH',
-          status: 'PAID',
+          method: method as any,
+          status: status as any,
           userId,
         },
       });

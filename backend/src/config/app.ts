@@ -49,6 +49,15 @@ export const config = {
     level: process.env.LOG_LEVEL || 'info',
     file: process.env.LOG_FILE || 'logs/app.log',
   },
+  mpesa: {
+    consumerKey: process.env.MPESA_CONSUMER_KEY || '',
+    consumerSecret: process.env.MPESA_CONSUMER_SECRET || '',
+    passkey: process.env.MPESA_PASSKEY || '',
+    shortcode: process.env.MPESA_SHORTCODE || '174379',
+    env: process.env.MPESA_ENV || 'sandbox',
+    callbackUrl: process.env.MPESA_CALLBACK_URL || 'https://your-domain.com/api/mpesa/callback',
+    appName: process.env.APP_NAME || 'SwiftPOS',
+  },
   business: {
     currency: process.env.DEFAULT_CURRENCY || 'KES',
     taxRate: parseFloat(process.env.DEFAULT_TAX_RATE || '16'),

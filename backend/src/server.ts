@@ -20,7 +20,7 @@ const RESOURCES = [
   'customers', 'suppliers', 'branches', 'registers', 'sales',
   'payments', 'invoices', 'purchases', 'quotations', 'returns',
   'expenses', 'inventory', 'discounts', 'tax-rates', 'notifications',
-  'settings', 'dashboard', 'reports', 'etims',
+  'settings', 'dashboard', 'reports', 'etims', 'mpesa',
 ];
 
 const ACTIONS = ['create', 'read', 'update', 'delete'];
