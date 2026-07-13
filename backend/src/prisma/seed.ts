@@ -282,14 +282,15 @@ async function main() {
 
     for (const item of s.items) {
       const p = products_all[item.productIdx];
+      const vatRate = Number(p.vatRate) || 0;
       await prisma.saleItem.create({
         data: {
           saleId: sale.id,
           productId: p.id,
           quantity: item.qty,
           unitPrice: item.price,
-          vatAmount: Math.round(item.qty * item.price * (p.vatRate || 0) / 100),
-          totalPrice: item.qty * item.price + Math.round(item.qty * item.price * (p.vatRate || 0) / 100),
+          vatAmount: Math.round(item.qty * item.price * vatRate / 100),
+          totalPrice: item.qty * item.price + Math.round(item.qty * item.price * vatRate / 100),
         },
       });
     }
