@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.get<any>('/auth/profile')
       .then((res) => setUser(normalizeUser(res.data)))
       .catch(() => {
-        api.setToken(null);
+        api.clearTokens();
         setUser(null);
       })
       .finally(() => setIsLoading(false));
@@ -49,12 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post<any>('/auth/login', { email, password });
-    api.setToken(res.data.accessToken);
+    api.setTokens(res.data.accessToken, res.data.refreshToken);
     setUser(normalizeUser(res.data.user));
   }, []);
 
   const logout = useCallback(() => {
-    api.setToken(null);
+    api.clearTokens();
     setUser(null);
   }, []);
 
