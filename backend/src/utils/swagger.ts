@@ -9,7 +9,7 @@ const options: swaggerJsdoc.Options = {
     info: {
       title: `${config.app.name} API`,
       version: '1.0.0',
-      description: 'Design Premium POS API - Kenya Edition with eTIMS',
+      description: 'Swift POS API - Kenya Edition with eTIMS',
     },
     servers: [
       {

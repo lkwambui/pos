@@ -1,7 +1,7 @@
 {
   "name": "swiftpos-backend",
   "version": "1.0.0",
-  "description": "Design Premium POS Backend - Kenya Edition with eTIMS",
+  "description": "Swift POS Backend - Kenya Edition with eTIMS",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
