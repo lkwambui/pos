@@ -13,16 +13,15 @@ interface ApiResponse<T> {
   };
 }
 
-let isRefreshing = false;
-let refreshPromise: Promise<boolean> | null = null;
-
 class ApiClient {
   private token: string | null = null;
-  private refreshToken: string | null = null;
+  private refreshTok: string | null = null;
+  private refreshing = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor() {
     this.token = localStorage.getItem('auth_token');
-    this.refreshToken = localStorage.getItem('refresh_token');
+    this.refreshTok = localStorage.getItem('refresh_token');
   }
 
   setToken(token: string | null) {
@@ -32,7 +31,7 @@ class ApiClient {
   }
 
   setRefreshToken(token: string | null) {
-    this.refreshToken = token;
+    this.refreshTok = token;
     if (token) localStorage.setItem('refresh_token', token);
     else localStorage.removeItem('refresh_token');
   }
@@ -49,21 +48,15 @@ class ApiClient {
     this.setRefreshToken(null);
   }
 
-  private async refreshAccessToken(): Promise<boolean> {
-    if (!this.refreshToken) return false;
-
+  private async doRefresh(): Promise<boolean> {
+    if (!this.refreshTok) return false;
     try {
       const res = await fetch(`${API_BASE}/auth/refresh-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: this.refreshToken }),
+        body: JSON.stringify({ refreshToken: this.refreshTok }),
       });
-
-      if (!res.ok) {
-        this.clearTokens();
-        return false;
-      }
-
+      if (!res.ok) { this.clearTokens(); return false; }
       const json = await res.json();
       this.setTokens(json.data.accessToken, json.data.refreshToken);
       return true;
@@ -73,49 +66,40 @@ class ApiClient {
     }
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
-    const execute = async (): Promise<ApiResponse<T>> => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+  async request<T>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
 
-      const res = await fetch(`${API_BASE}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
+    const res = await fetch(`${API_BASE}${path}`, {
+      method, headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
-      const json = await res.json();
+    const json = await res.json();
 
-      if (!res.ok) {
-        if (res.status === 401 && this.refreshToken && !path.includes('/auth/refresh-token')) {
-          if (!isRefreshing) {
-            isRefreshing = true;
-            refreshPromise = this.refreshAccessToken().finally(() => {
-              isRefreshing = false;
-              refreshPromise = null;
-            });
-          }
-
-          const refreshed = await refreshPromise;
-          if (refreshed) {
-            headers['Authorization'] = `Bearer ${this.token}`;
-            const retryRes = await fetch(`${API_BASE}${path}`, {
-              method,
-              headers,
-              body: body ? JSON.stringify(body) : undefined,
-            });
-            const retryJson = await retryRes.json();
-            if (!retryRes.ok) throw new Error(retryJson.message || 'Request failed');
-            return retryJson;
-          }
+    if (!res.ok) {
+      if (res.status === 401 && this.refreshTok && !path.includes('/auth/refresh-token')) {
+        if (!this.refreshing) {
+          this.refreshing = true;
+          this.refreshPromise = this.doRefresh().finally(() => {
+            this.refreshing = false;
+            this.refreshPromise = null;
+          });
         }
-        throw new Error(json.message || 'Request failed');
+
+        const ok = await this.refreshPromise;
+        if (ok) {
+          headers['Authorization'] = `Bearer ${this.token}`;
+          const r2 = await fetch(`${API_BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+          const j2 = await r2.json();
+          if (!r2.ok) throw new Error(j2.message || 'Request failed');
+          return j2;
+        }
       }
+      throw new Error(json.message || 'Request failed');
+    }
 
-      return json;
-    };
-
-    return execute();
+    return json;
   }
 
   get<T>(path: string) { return this.request<T>('GET', path); }
