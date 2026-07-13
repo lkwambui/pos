@@ -1,22 +1,23 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useAuth } from "../hooks/useAuth";
 import LoginPage from "../components/LoginPage";
-import { DashboardView } from "./DashboardView";
-import { NewSaleView } from "./NewSaleView";
-import { ETimsView } from "./ETimsView";
-import { ReportsView } from "./ReportsView";
-import { SettingsView } from "./SettingsView";
-import { InventoryView } from "./InventoryView";
-import { SuppliersView } from "./SuppliersView";
-import { PurchasesView } from "./PurchasesView";
-import { ReturnsView } from "./ReturnsView";
-import { InvoicesView } from "./InvoicesView";
-import { QuotationsView } from "./QuotationsView";
-import { PaymentsView } from "./PaymentsView";
-import { ExpensesView } from "./ExpensesView";
-import { UsersView } from "./UsersView";
-import { ProductsView } from "./ProductsView";
-import { CustomersView } from "./CustomersView";
+
+const DashboardView = lazy(() => import("./DashboardView").then(m => ({ default: m.DashboardView })));
+const NewSaleView = lazy(() => import("./NewSaleView").then(m => ({ default: m.NewSaleView })));
+const ETimsView = lazy(() => import("./ETimsView").then(m => ({ default: m.ETimsView })));
+const ReportsView = lazy(() => import("./ReportsView").then(m => ({ default: m.ReportsView })));
+const SettingsView = lazy(() => import("./SettingsView").then(m => ({ default: m.SettingsView })));
+const InventoryView = lazy(() => import("./InventoryView").then(m => ({ default: m.InventoryView })));
+const SuppliersView = lazy(() => import("./SuppliersView").then(m => ({ default: m.SuppliersView })));
+const PurchasesView = lazy(() => import("./PurchasesView").then(m => ({ default: m.PurchasesView })));
+const ReturnsView = lazy(() => import("./ReturnsView").then(m => ({ default: m.ReturnsView })));
+const InvoicesView = lazy(() => import("./InvoicesView").then(m => ({ default: m.InvoicesView })));
+const QuotationsView = lazy(() => import("./QuotationsView").then(m => ({ default: m.QuotationsView })));
+const PaymentsView = lazy(() => import("./PaymentsView").then(m => ({ default: m.PaymentsView })));
+const ExpensesView = lazy(() => import("./ExpensesView").then(m => ({ default: m.ExpensesView })));
+const UsersView = lazy(() => import("./UsersView").then(m => ({ default: m.UsersView })));
+const ProductsView = lazy(() => import("./ProductsView").then(m => ({ default: m.ProductsView })));
+const CustomersView = lazy(() => import("./CustomersView").then(m => ({ default: m.CustomersView })));
 import {
   LayoutDashboard, ShoppingCart, Package, Boxes, ShoppingBag,
   Truck, Users, FileText, RotateCcw, CreditCard, Banknote,
@@ -202,25 +203,28 @@ export default function App() {
   if (!user) return <LoginPage />;
 
   const renderView = () => {
-    switch (active) {
-      case "dashboard": return <DashboardView />;
-      case "new-sale": return <NewSaleView />;
-      case "products": return <ProductsView />;
-      case "customers": return <CustomersView />;
-      case "etims": return <ETimsView />;
-      case "reports": return <ReportsView />;
-      case "settings": return <SettingsView />;
-      case "inventory": return <InventoryView />;
-      case "suppliers": return <SuppliersView />;
-      case "purchases": return <PurchasesView />;
-      case "returns": return <ReturnsView />;
-      case "invoices": return <InvoicesView />;
-      case "quotations": return <QuotationsView />;
-      case "payments": return <PaymentsView />;
-      case "expenses": return <ExpensesView />;
-      case "users": return <UsersView />;
-      default: return <DashboardView />;
-    }
+    const view = (() => {
+      switch (active) {
+        case "dashboard": return <DashboardView />;
+        case "new-sale": return <NewSaleView />;
+        case "products": return <ProductsView />;
+        case "customers": return <CustomersView />;
+        case "etims": return <ETimsView />;
+        case "reports": return <ReportsView />;
+        case "settings": return <SettingsView />;
+        case "inventory": return <InventoryView />;
+        case "suppliers": return <SuppliersView />;
+        case "purchases": return <PurchasesView />;
+        case "returns": return <ReturnsView />;
+        case "invoices": return <InvoicesView />;
+        case "quotations": return <QuotationsView />;
+        case "payments": return <PaymentsView />;
+        case "expenses": return <ExpensesView />;
+        case "users": return <UsersView />;
+        default: return <DashboardView />;
+      }
+    })();
+    return <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" /></div>}>{view}</Suspense>;
   };
 
   return (
