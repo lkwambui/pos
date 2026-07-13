@@ -13,50 +13,53 @@ const RESOURCES = [
 
 const ACTIONS = ['create', 'read', 'update', 'delete'];
 
+async function upsertRole(name: string, description: string) {
+  const existing = await prisma.role.findFirst({ where: { name } });
+  if (existing) return existing;
+  return prisma.role.create({ data: { name, description } });
+}
+
 async function main() {
   logger.info('Seeding database...');
 
-  const existingRoles = await prisma.role.findMany();
-  if (existingRoles.length > 0) {
-    const existingUsers = await prisma.user.findMany();
-    const existingProducts = await prisma.product.findMany();
-    if (existingUsers.length > 0 && existingProducts.length > 0) {
-      logger.info('Database already fully seeded, skipping');
-      return;
-    }
+  const existingProducts = await prisma.product.findMany();
+  if (existingProducts.length > 0) {
+    logger.info('Database already fully seeded, skipping');
+    return;
   }
 
-  const adminRole = await prisma.role.create({
-    data: { name: 'Admin', description: 'Full system access' },
-  });
+  const adminRole = await upsertRole('Admin', 'Full system access');
+  await upsertRole('Manager', 'Branch management access');
+  await upsertRole('Cashier', 'Point of sale operations');
+  await upsertRole('Accountant', 'Financial management');
+  await upsertRole('InventoryManager', 'Stock management');
 
-  await prisma.role.create({ data: { name: 'Manager', description: 'Branch management access' } });
-  await prisma.role.create({ data: { name: 'Cashier', description: 'Point of sale operations' } });
-  await prisma.role.create({ data: { name: 'Accountant', description: 'Financial management' } });
-  await prisma.role.create({ data: { name: 'InventoryManager', description: 'Stock management' } });
+  const existingPermissions = await prisma.permission.findMany({ where: { roleId: adminRole.id } });
+  if (existingPermissions.length === 0) {
+    const adminPermissions = RESOURCES.flatMap(resource =>
+      ACTIONS.map(action => ({
+        roleId: adminRole.id,
+        action,
+        resource,
+      }))
+    );
+    await prisma.permission.createMany({ data: adminPermissions });
+  }
 
-  const adminPermissions = RESOURCES.flatMap(resource =>
-    ACTIONS.map(action => ({
-      roleId: adminRole.id,
-      action,
-      resource,
-    }))
-  );
-
-  await prisma.permission.createMany({ data: adminPermissions });
-
-  const hashedPassword = await bcrypt.hash('password123', config.bcrypt.saltRounds);
-
-  await prisma.user.create({
-    data: {
-      email: 'admin@swiftpos.com',
-      password: hashedPassword,
-      firstName: 'System',
-      lastName: 'Admin',
-      roleId: adminRole.id,
-      isVerified: true,
-    },
-  });
+  const existingUser = await prisma.user.findUnique({ where: { email: 'admin@swiftpos.com' } });
+  if (!existingUser) {
+    const hashedPassword = await bcrypt.hash('password123', config.bcrypt.saltRounds);
+    await prisma.user.create({
+      data: {
+        email: 'admin@swiftpos.com',
+        password: hashedPassword,
+        firstName: 'System',
+        lastName: 'Admin',
+        roleId: adminRole.id,
+        isVerified: true,
+      },
+    });
+  }
 
   await prisma.taxRate.createMany({
     data: [
