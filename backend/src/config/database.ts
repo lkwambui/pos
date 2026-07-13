@@ -9,7 +9,7 @@ function createPrisma() {
       : ['warn', 'error'],
   });
 
-  client.$use(async (params, next) => {
+  (client as any).$use(async (params: any, next: any) => {
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
