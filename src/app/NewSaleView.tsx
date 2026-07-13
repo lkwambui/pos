@@ -56,6 +56,15 @@ export function NewSaleView() {
   const [lastCheckoutId, setLastCheckoutId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const subtotal = cart.reduce((acc, i) => acc + i.price * i.qty * (1 - i.discount / 100), 0);
+  const vat = cart.reduce((acc, i) => {
+    const lineTotal = i.price * i.qty * (1 - i.discount / 100);
+    return acc + (lineTotal * i.vatRate) / (100 + i.vatRate);
+  }, 0);
+  const totalDiscount = cart.reduce((acc, i) => acc + i.price * i.qty * (i.discount / 100), 0);
+  const total = subtotal;
+  const balance = amountPaid ? parseFloat(amountPaid.replace(/,/g, "")) - total : 0;
+
   useEffect(() => {
     api.get<PaginatedResponse<Product>>("/products?limit=100")
       .then(res => {
@@ -109,15 +118,6 @@ export function NewSaleView() {
   };
 
   const removeItem = (id: string) => setCart(prev => prev.filter(i => i.id !== id));
-
-  const subtotal = cart.reduce((acc, i) => acc + i.price * i.qty * (1 - i.discount / 100), 0);
-  const vat = cart.reduce((acc, i) => {
-    const lineTotal = i.price * i.qty * (1 - i.discount / 100);
-    return acc + (lineTotal * i.vatRate) / (100 + i.vatRate);
-  }, 0);
-  const totalDiscount = cart.reduce((acc, i) => acc + i.price * i.qty * (i.discount / 100), 0);
-  const total = subtotal;
-  const balance = amountPaid ? parseFloat(amountPaid.replace(/,/g, "")) - total : 0;
 
   const handlePaymentMode = (mode: string) => {
     setPaymentMode(mode === paymentMode ? null : mode);
