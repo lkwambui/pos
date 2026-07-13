@@ -23,10 +23,7 @@ async function main() {
   logger.info('Seeding database...');
 
   const existingProducts = await prisma.product.findMany();
-  if (existingProducts.length > 0) {
-    logger.info('Database already fully seeded, skipping');
-    return;
-  }
+  if (existingProducts.length === 0) {
 
   const adminRole = await upsertRole('Admin', 'Full system access');
   await upsertRole('Manager', 'Branch management access');
@@ -183,13 +180,206 @@ async function main() {
     prisma.supplier.create({ data: { name: 'Coca-Cola Kenya', phone: '+254722222222', email: 'orders@cocacola.co.ke', branchId: branch.id } }),
     prisma.supplier.create({ data: { name: 'Unilever Kenya', phone: '+254733333333', email: 'supply@unilever.co.ke', branchId: branch.id } }),
   ]);
+  }
 
-  logger.info('Database seeding completed successfully');
+  logger.info('Base seed completed');
+
+  const existingSales = await prisma.sale.findMany();
+  if (existingSales.length > 0) {
+    logger.info('Sample transactions already exist, skipping');
+    return;
+  }
+
+  logger.info('Seeding sample transactions...');
+
+  const branch_tx = (await prisma.branch.findFirst())!;
+  const admin = (await prisma.user.findFirst())!;
+  const products_all = await prisma.product.findMany({ include: { brand: true, category: true } });
+  const customers_all = await prisma.customer.findMany();
+
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86400000);
+
+  const sampleSales = [
+    {
+      customerIdx: 0, createdAt: daysAgo(6),
+      items: [
+        { productIdx: 0, qty: 3, price: 285 },
+        { productIdx: 1, qty: 2, price: 75 },
+        { productIdx: 6, qty: 5, price: 35 },
+      ],
+    },
+    {
+      customerIdx: 1, createdAt: daysAgo(5),
+      items: [
+        { productIdx: 3, qty: 1, price: 420 },
+        { productIdx: 4, qty: 2, price: 380 },
+        { productIdx: 11, qty: 1, price: 510 },
+      ],
+    },
+    {
+      customerIdx: 2, createdAt: daysAgo(4),
+      items: [
+        { productIdx: 10, qty: 2, price: 650 },
+        { productIdx: 0, qty: 1, price: 285 },
+        { productIdx: 5, qty: 3, price: 195 },
+        { productIdx: 9, qty: 4, price: 195 },
+      ],
+    },
+    {
+      customerIdx: 0, createdAt: daysAgo(3),
+      items: [
+        { productIdx: 2, qty: 10, price: 100 },
+        { productIdx: 7, qty: 2, price: 165 },
+        { productIdx: 1, qty: 4, price: 75 },
+      ],
+    },
+    {
+      customerIdx: 3, createdAt: daysAgo(2),
+      items: [
+        { productIdx: 6, qty: 8, price: 35 },
+        { productIdx: 5, qty: 1, price: 195 },
+        { productIdx: 4, qty: 1, price: 380 },
+      ],
+    },
+    {
+      customerIdx: 4, createdAt: daysAgo(1),
+      items: [
+        { productIdx: 10, qty: 3, price: 650 },
+        { productIdx: 3, qty: 2, price: 420 },
+        { productIdx: 8, qty: 6, price: 250 },
+      ],
+    },
+    {
+      customerIdx: null, createdAt: new Date(),
+      items: [
+        { productIdx: 9, qty: 2, price: 195 },
+        { productIdx: 1, qty: 3, price: 75 },
+      ],
+    },
+  ];
+
+  for (let si = 0; si < sampleSales.length; si++) {
+    const s = sampleSales[si];
+    const subtotal = s.items.reduce((sum, i) => sum + i.qty * i.price, 0);
+    const vatAmount = Math.round(subtotal * 0.16);
+    const total = subtotal + vatAmount;
+    const saleNumber = `SALE-${String(1000 + si).padStart(4, '0')}`;
+
+    const sale = await prisma.sale.create({
+      data: {
+        saleNumber,
+        subtotal,
+        taxAmount: vatAmount,
+        total,
+        status: 'COMPLETED',
+        userId: admin.id,
+        branchId: branch_tx.id,
+        customerId: s.customerIdx !== null ? customers_all[s.customerIdx].id : null,
+        createdAt: s.createdAt,
+        updatedAt: s.createdAt,
+      },
+    });
+
+    for (const item of s.items) {
+      const p = products_all[item.productIdx];
+      await prisma.saleItem.create({
+        data: {
+          saleId: sale.id,
+          productId: p.id,
+          quantity: item.qty,
+          unitPrice: item.price,
+          vatAmount: Math.round(item.qty * item.price * (p.vatRate || 0) / 100),
+          totalPrice: item.qty * item.price + Math.round(item.qty * item.price * (p.vatRate || 0) / 100),
+        },
+      });
+    }
+
+    await prisma.payment.create({
+      data: {
+        saleId: sale.id,
+        amount: total,
+        method: 'CASH',
+        status: 'PAID',
+        userId: admin.id,
+        reference: `PAY-${saleNumber}`,
+        createdAt: s.createdAt,
+      },
+    });
+
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-${String(1000 + si).padStart(4, '0')}`,
+        saleId: sale.id,
+        total,
+        subtotal,
+        taxAmount: vatAmount,
+        status: 'PAID',
+        dueDate: s.createdAt,
+        createdAt: s.createdAt,
+      },
+    });
+  }
+
+  const expenseCategories = await prisma.expenseCategory.findMany();
+
+  const sampleExpenses = [
+    { catIdx: 0, amount: 80000, desc: 'Monthly rent - Westlands', date: daysAgo(2) },
+    { catIdx: 1, amount: 12500, desc: 'Electricity bill', date: daysAgo(1) },
+    { catIdx: 1, amount: 4500, desc: 'Water bill', date: daysAgo(1) },
+    { catIdx: 1, amount: 8500, desc: 'Internet & phone', date: daysAgo(3) },
+    { catIdx: 2, amount: 120000, desc: 'Staff salaries (3 cashiers)', date: daysAgo(5) },
+    { catIdx: 6, amount: 3500, desc: 'Receipt rolls & stationery', date: daysAgo(4) },
+    { catIdx: 4, amount: 15000, desc: 'Social media ads', date: daysAgo(6) },
+    { catIdx: 5, amount: 6000, desc: 'Stock delivery - transport', date: daysAgo(2) },
+  ];
+
+  for (const exp of sampleExpenses) {
+    await prisma.expense.create({
+      data: {
+        amount: exp.amount,
+        description: exp.desc,
+        categoryId: expenseCategories[exp.catIdx].id,
+        userId: admin.id,
+        branchId: branch_tx.id,
+        date: exp.date,
+        createdAt: exp.date,
+      },
+    });
+  }
+
+  await prisma.register.create({
+    data: {
+      name: 'Main Register',
+      branchId: branch_tx.id,
+      isActive: true,
+    },
+  });
+
+  await prisma.discount.create({
+    data: {
+      name: 'Loyalty 5%',
+      type: 'PERCENTAGE',
+      value: 5,
+      isActive: true,
+    },
+  });
+
+  await prisma.discount.create({
+    data: {
+      name: 'Bulk Purchase 10%',
+      type: 'PERCENTAGE',
+      value: 10,
+      minPurchase: 5000,
+      isActive: true,
+    },
+  });
+
+  logger.info('Sample transaction data seeded successfully');
 }
 
 main()
   .catch((error) => {
-    logger.error({ error }, 'Seed failed');
+    logger.error({ err: error }, 'Seed failed');
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
